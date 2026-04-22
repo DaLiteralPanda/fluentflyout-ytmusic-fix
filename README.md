@@ -4,14 +4,14 @@ A Chrome extension that fixes album art, artist name, and track metadata for You
 
 ## The problem
 
-When you play music on [music.youtube.com](https://music.youtube.com), Chrome only forwards a bare minimum of metadata to the **Windows System Media Transport Controls (SMTC)** — the OS-level layer that media overlay apps read from. You get the song title, but no album art, no artist name, and no accent colours.
+When you play music on [music.youtube.com](https://music.youtube.com), Chrome only forwards a bare minimum of metadata to the **Windows System Media Transport Controls (SMTC)**, the OS-level layer that media overlay apps read from. You get the song title, but no album art, no artist name, and no accent colours.
 
 | Without this extension | With this extension |
 | --- | --- |
 | ![Chrome logo, no artist, no art](<./assets/images/before.png>) | ![Album cover, artist, accent colours](<./assets/images/after.png>) |
 | Chrome logo, no artist, no art | Album cover, artist, accent colours |
 
-This isn't a FluentFlyout bug. It's a Chrome limitation — Chrome strips artwork from the media session before passing it to Windows. YouTube Music sets the metadata correctly in the browser, but it never reaches the OS.
+This isn't a FluentFlyout bug. It's a Chrome limitation Chrome strips artwork from the media session before passing it to Windows. YouTube Music sets the metadata correctly in the browser, but it never reaches the OS.
 
 ## What this extension does
 
@@ -51,7 +51,7 @@ This extension was designed with security as a first-class concern:
 - **No background worker.** The extension is entirely dormant until you open YouTube Music.
 - **URL allowlist.** Artwork URLs are validated with `new URL()` and checked against a strict hostname allowlist (`lh3.googleusercontent.com`, `i.ytimg.com`, `yt3.ggpht.com`). Any other URL is rejected.
 - **No dynamic code execution.** No `eval()`, no `innerHTML`, no `new Function()`, no `<script>` tag injection.
-- **No dependencies.** Zero npm packages — pure vanilla JS with no build step and no supply chain.
+- **No dependencies.** Zero npm packages. Vanilla JS with no build step and no supply chain.
 - **Input validation.** All strings from the page are type-checked, trimmed, and only accepted if they are plain strings.
 
 ## Compatibility
