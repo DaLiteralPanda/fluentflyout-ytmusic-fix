@@ -1,4 +1,4 @@
-# YouTube Music – Rich Media Session
+# FluentFlyout YTMusic Fix
 
 A Chrome extension that fixes album art, artist name, and track metadata for YouTube Music in the browser — so apps like **[FluentFlyout](https://github.com/unchihugo/FluentFlyout)** display the full, beautiful flyout instead of just a Chrome logo.
 
