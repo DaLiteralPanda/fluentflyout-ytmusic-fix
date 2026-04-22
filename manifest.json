@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "FluentFlyout YouTube Music Fix",
+  "version": "1.1.0",
+  "description": "Enriches the Windows Media Session with album art, artist name, and track info from YouTube Music — making FluentFlyout and other media overlays display correctly.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://music.youtube.com/*"],
+      "js": ["src/page-context.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["*://music.youtube.com/*"],
+      "js": ["src/content.js"],
+      "run_at": "document_idle",
+      "world": "ISOLATED"
+    }
+  ],
+  "permissions": [],
+  "host_permissions": [
+    "*://music.youtube.com/*"
+  ]
+}
