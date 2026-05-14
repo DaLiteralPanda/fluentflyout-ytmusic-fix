@@ -17,10 +17,8 @@
  *  - All user-visible strings come from YouTube Music's own DOM, not from
  *    any external source.
  *
- * v1.2.0 — Hardened DOM selectors to survive YouTube Music UI redesigns.
- * Rather than relying on specific class names (which Google renames freely),
- * we now use a broad candidate search filtered by our URL allowlist, making
- * the extension resilient to player bar restructuring.
+ * v1.2.1 — Added yt3.googleusercontent.com to allowlist (used after April 2026
+ * redesign) and added .thumbnail-image-wrapper selector as fast-path.
  */
 
 (() => {
@@ -32,6 +30,7 @@
   // Any thumbnail URL not matching these is rejected.
   const ALLOWED_ART_HOSTS = [
     'lh3.googleusercontent.com',
+    'yt3.googleusercontent.com', // used by YTM after April 2026 redesign
     'i.ytimg.com',
     'yt3.ggpht.com',
   ];
@@ -102,10 +101,12 @@
     // ── Tier 1: specific selectors (fast path) ───────────────────────────────
     if (playerBar) {
       const specificCandidates = [
+        playerBar.querySelector('.thumbnail-image-wrapper img'), // Current selector as of April 2026 redesign
         playerBar.querySelector('#thumbnail img'),
         playerBar.querySelector('ytmusic-thumbnail img'),
         playerBar.querySelector('img.thumbnail'),
         playerBar.querySelector('img[src*="lh3.googleusercontent"]'),
+        playerBar.querySelector('img[src*="yt3.googleusercontent"]'),
         playerBar.querySelector('img[src*="yt3.ggpht"]'),
         // New redesign selectors — added v1.2.0
         playerBar.querySelector('ytmusic-player-bar-background img'),
