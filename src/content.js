@@ -6,8 +6,8 @@
  *
  * Security properties:
  *  - Zero network requests. No fetch(), XHR, or WebSocket anywhere.
- *  - Artwork URLs are validated to only allow lh3.googleusercontent.com and
- *    i.ytimg.com — the two domains YouTube Music actually uses for thumbnails.
+ *  - Artwork URLs are validated to only allow lh3.googleusercontent.com,
+ *    i.ytimg.com and yt3.ggpht.com — the domains YouTube Music uses for art.
  *    Any other URL is rejected and no artwork is set.
  *  - CustomEvent payloads are validated field-by-field; unexpected fields are
  *    silently dropped. No eval(), no dynamic code execution.
@@ -16,6 +16,11 @@
  *    the DOM or executes any string as code.
  *  - All user-visible strings come from YouTube Music's own DOM, not from
  *    any external source.
+ *
+ * v1.2.0 — Hardened DOM selectors to survive YouTube Music UI redesigns.
+ * Rather than relying on specific class names (which Google renames freely),
+ * we now use a broad candidate search filtered by our URL allowlist, making
+ * the extension resilient to player bar restructuring.
  */
 
 (() => {
@@ -58,7 +63,13 @@
    * Only operates on already-validated URLs.
    */
   function resizeGoogleThumbnail(url, w, h) {
-    return url.replace(/=w\d+-h\d+[^"'\s]*$/, `=w${w}-h${h}-l90-rj`);
+    // Handle both =wN-hN style params and plain URLs
+    if (url.includes('=w')) {
+      return url.replace(/=w\d+-h\d+[^"'\s]*$/, `=w${w}-h${h}-l90-rj`);
+    }
+    // For ytimg.com style URLs (e.g. /vi/<id>/hqdefault.jpg) keep as-is
+    // since they don't support the resize parameter
+    return url;
   }
 
   /**
@@ -71,26 +82,124 @@
 
   // ─── DOM helpers ────────────────────────────────────────────────────────────
 
+  /**
+   * Find the album art thumbnail from the YouTube Music player bar.
+   *
+   * Strategy: rather than using fragile class/id selectors that break when
+   * Google redesigns the UI, we search broadly within the player bar for any
+   * <img> whose src passes our allowlist check. We prefer larger images and
+   * images closer to the player bar root.
+   *
+   * Selector tiers (tried in order, first valid URL wins):
+   *  1. Specific known selectors (fast path — works until next redesign)
+   *  2. Any <img> inside ytmusic-player-bar with an allowlisted src
+   *  3. Any <img> anywhere on the page with an allowlisted src that looks
+   *     like album art (square-ish natural dimensions, not a tiny icon)
+   */
   function getThumbnailFromDOM() {
     const playerBar = document.querySelector('ytmusic-player-bar');
+
+    // ── Tier 1: specific selectors (fast path) ───────────────────────────────
     if (playerBar) {
-      const img =
-        playerBar.querySelector('#thumbnail img') ||
-        playerBar.querySelector('ytmusic-thumbnail img') ||
-        playerBar.querySelector('img.thumbnail');
-      if (img?.src && isAllowedArtworkUrl(img.src)) {
-        return resizeGoogleThumbnail(img.src, 512, 512);
+      const specificCandidates = [
+        playerBar.querySelector('#thumbnail img'),
+        playerBar.querySelector('ytmusic-thumbnail img'),
+        playerBar.querySelector('img.thumbnail'),
+        playerBar.querySelector('img[src*="lh3.googleusercontent"]'),
+        playerBar.querySelector('img[src*="yt3.ggpht"]'),
+        // New redesign selectors — added v1.2.0
+        playerBar.querySelector('ytmusic-player-bar-background img'),
+        playerBar.querySelector('.image-wrapper img'),
+        playerBar.querySelector('.thumbnail-wrapper img'),
+        playerBar.querySelector('[id*="thumbnail"] img'),
+        playerBar.querySelector('[class*="thumbnail"] img'),
+        playerBar.querySelector('[class*="cover"] img'),
+        playerBar.querySelector('[class*="artwork"] img'),
+      ];
+
+      for (const img of specificCandidates) {
+        if (img?.src && isAllowedArtworkUrl(img.src)) {
+          return resizeGoogleThumbnail(img.src, 512, 512);
+        }
+      }
+
+      // ── Tier 2: broad scan within player bar ─────────────────────────────
+      // Walk all imgs in the player bar, pick the one with the largest area
+      // that passes the allowlist — most likely to be album art, not an icon.
+      const allImgs = Array.from(playerBar.querySelectorAll('img'));
+      const validImgs = allImgs.filter(img => isAllowedArtworkUrl(img.src));
+
+      if (validImgs.length > 0) {
+        // Prefer larger images (album art) over small icons
+        const best = validImgs.reduce((a, b) =>
+          (b.naturalWidth * b.naturalHeight) > (a.naturalWidth * a.naturalHeight) ? b : a
+        );
+        if (best.src) return resizeGoogleThumbnail(best.src, 512, 512);
       }
     }
 
-    const fallback = document.querySelector(
-      'ytmusic-player #song-image img, .ytmusic-player-bar img[src*="lh3.googleusercontent"]'
+    // ── Tier 3: page-wide fallback ───────────────────────────────────────────
+    // Last resort: find any large allowlisted image on the page.
+    // Filter to images that are at least 48x48 to exclude nav icons.
+    const pageImgs = Array.from(document.querySelectorAll('img'));
+    const validPageImgs = pageImgs.filter(img =>
+      isAllowedArtworkUrl(img.src) &&
+      img.naturalWidth >= 48 &&
+      img.naturalHeight >= 48
     );
-    if (fallback?.src && isAllowedArtworkUrl(fallback.src)) {
-      return resizeGoogleThumbnail(fallback.src, 512, 512);
+
+    if (validPageImgs.length > 0) {
+      const best = validPageImgs.reduce((a, b) =>
+        (b.naturalWidth * b.naturalHeight) > (a.naturalWidth * a.naturalHeight) ? b : a
+      );
+      if (best.src) return resizeGoogleThumbnail(best.src, 512, 512);
     }
 
     return null;
+  }
+
+  /**
+   * Find the song title and artist from the player bar.
+   * Uses multiple selector tiers for the same resilience reason as above.
+   */
+  function getTextFromDOM() {
+    const titleSelectors = [
+      // Known selectors
+      'ytmusic-player-bar .title',
+      'ytmusic-player-bar .title.ytmusic-player-bar',
+      // Broader fallbacks for redesigns
+      'ytmusic-player-bar [class*="title"]:not([class*="subtitle"])',
+      'ytmusic-player-bar .song-title',
+      'ytmusic-player-bar .track-title',
+      'ytmusic-player-bar yt-formatted-string.title',
+    ];
+
+    const artistSelectors = [
+      // Known selectors
+      'ytmusic-player-bar .byline a',
+      'ytmusic-player-bar .byline',
+      // Broader fallbacks
+      'ytmusic-player-bar [class*="byline"]',
+      'ytmusic-player-bar [class*="subtitle"]',
+      'ytmusic-player-bar [class*="artist"]',
+      'ytmusic-player-bar yt-formatted-string.byline',
+    ];
+
+    let title = '';
+    for (const sel of titleSelectors) {
+      const el = document.querySelector(sel);
+      const text = safeString(el?.textContent);
+      if (text) { title = text; break; }
+    }
+
+    let artist = '';
+    for (const sel of artistSelectors) {
+      const el = document.querySelector(sel);
+      const text = safeString(el?.textContent);
+      if (text) { artist = text; break; }
+    }
+
+    return { title, artist };
   }
 
   // ─── Core: apply enriched metadata ──────────────────────────────────────────
@@ -170,15 +279,7 @@
     const target = document.querySelector('ytmusic-player-bar') || document.body;
 
     const observer = new MutationObserver(() => {
-      const titleEl  = document.querySelector(
-        'ytmusic-player-bar .title, .ytmusic-player-bar .title.ytmusic-player-bar'
-      );
-      const artistEl = document.querySelector(
-        'ytmusic-player-bar .byline a, .ytmusic-player-bar .byline'
-      );
-
-      const title  = safeString(titleEl?.textContent);
-      const artist = safeString(artistEl?.textContent);
+      const { title, artist } = getTextFromDOM();
 
       if (title && title !== lastTitle) {
         applyRichMetadata({ title, artist, artworkUrl: getThumbnailFromDOM() });
